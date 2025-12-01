@@ -1,0 +1,76 @@
+{
+  "juryData": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "username": "john.doe",
+      "assigned": 10,
+      "completed": 4
+    },
+    {
+      "id": 2,
+      "name": "Jane Smith",
+      "username": "jane.smith",
+      "assigned": 8,
+      "completed": 8
+    },
+    {
+      "id": 3,
+      "name": "Ahmad Yusuf",
+      "username": "ahmad.yusuf",
+      "assigned": 12,
+      "completed": 6
+    },
+    {
+      "id": 4,
+      "name": "Sarah Johnson",
+      "username": "sarah.j",
+      "assigned": 15,
+      "completed": 10
+    },
+    {
+      "id": 5,
+      "name": "Michael Brown",
+      "username": "michael.brown",
+      "assigned": 20,   
+      "completed": 10
+    },
+    {
+      "id": 6,
+      "name": "Brown",
+      "username": "brown",
+      "assigned": 20,
+      "completed": 10
+    }
+  ],
+  "resultData": [
+    {
+      "id": 1,
+      "participant": "Team Alpha",
+      "score": 85,
+      "jury": "John Doe",
+      "level": "Secondary"
+    },
+    {
+      "id": 2,
+      "participant": "Team Beta",
+      "score": 92,
+      "jury": "Jane Smith",
+      "level": "University"
+    },
+    {
+      "id": 3,
+      "participant": "Team Gamma",
+      "score": 78,
+      "jury": "Ahmad Yusuf",
+      "level": "Elementary"
+    },
+    {
+      "id": 4,
+      "participant": "Team Delta",
+      "score": 88,
+      "jury": "Sarah Johnson",
+      "level": "Secondary"
+    }
+  ]
+}
