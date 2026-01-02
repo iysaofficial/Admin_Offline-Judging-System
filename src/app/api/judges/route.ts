@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
+import bcrypt from "bcryptjs";
 
 // ✅ Tambah juri baru
 export async function POST(req: Request) {
@@ -14,11 +15,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const { data, error } = await supabase.from("judges").insert([
       {
         name,
         username,
-        password,
+        password: hashedPassword,
         status: status || "active",
       },
     ]);

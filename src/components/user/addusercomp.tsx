@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import * as XLSX from "xlsx";
 
 const AddUserComp: React.FC = () => {
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // State untuk manual input
   const [form, setForm] = useState({
@@ -13,10 +14,12 @@ const AddUserComp: React.FC = () => {
     status: "active",
   });
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: string; text: string } | null>(null);
 
   // Handle input text
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     setMessage(null);
@@ -25,7 +28,7 @@ const AddUserComp: React.FC = () => {
   // Handle Save manual user
   const handleSaveUser = async () => {
     if (!form.name || !form.username || !form.password) {
-      setMessage("❌ Semua field harus diisi");
+      setMessage({ type: "danger", text: "Semua field harus diisi!" });
       return;
     }
 
@@ -41,19 +44,88 @@ const AddUserComp: React.FC = () => {
 
       if (!res.ok) throw new Error(data.error || "Gagal menambahkan juri");
 
-      setMessage("✅ Juri berhasil ditambahkan!");
+      setMessage({ type: "success", text: "Juri berhasil ditambahkan!" });
       setForm({ name: "", username: "", password: "", status: "active" });
     } catch (err: any) {
-      setMessage("❌ " + err.message);
+      setMessage({ type: "danger", text: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle File Upload (masih dummy)
+  // Handle File Change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setSelectedFile(file.name);
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+    setMessage(null);
+  };
+
+  // Handle Bulk Upload
+  const handleBulkUpload = async () => {
+    if (!selectedFile) {
+      setMessage({ type: "danger", text: "Please select a file." });
+      return;
+    }
+
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of json) {
+          try {
+            const res = await fetch("/api/judges", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: row.name,
+                username: row.username,
+                password: row.password,
+                status: row.status || "active",
+              }),
+            });
+
+            if (!res.ok) {
+              const errorData = await res.json();
+              throw new Error(errorData.error || `Failed to add ${row.name}`);
+            }
+            successCount++;
+          } catch (rowError) {
+            console.error(rowError);
+            errorCount++;
+          }
+        }
+        setMessage({
+          type: "success",
+          text: `Upload complete. ${successCount} successful, ${errorCount} failed.`,
+        });
+      } catch (error: any) {
+        setMessage({ type: "danger", text: error.message });
+      } finally {
+        setLoading(false);
+        setSelectedFile(null);
+      }
+    };
+    reader.readAsArrayBuffer(selectedFile);
+  };
+
+  const handleExportTemplate = () => {
+    const templateData = [
+      ["name", "username", "password", "status (optional)"],
+      ["John Doe", "johndoe", "password123", "active"],
+    ];
+    const templateSheet = XLSX.utils.aoa_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, templateSheet, "Judges Template");
+    XLSX.writeFile(wb, "judges_template.xlsx");
   };
 
   return (
@@ -143,13 +215,9 @@ const AddUserComp: React.FC = () => {
 
               {message && (
                 <div
-                  className={`alert mt-3 ${
-                    message.startsWith("✅")
-                      ? "alert-success"
-                      : "alert-danger"
-                  }`}
+                  className={`alert mt-3 alert-${message.type}`}
                 >
-                  {message}
+                  {message.text}
                 </div>
               )}
             </div>
@@ -177,7 +245,7 @@ const AddUserComp: React.FC = () => {
                 {selectedFile && (
                   <small className="text-success mt-2 d-block">
                     <i className="bi bi-check-circle me-1"></i>
-                    Selected: {selectedFile}
+                    Selected: {selectedFile.name}
                   </small>
                 )}
               </div>
@@ -185,16 +253,32 @@ const AddUserComp: React.FC = () => {
               <div className="alert alert-info">
                 <small>
                   <i className="bi bi-info-circle me-2"></i>
-                  Upload an Excel file with columns: Name, Username, Password
+                  Upload an Excel file with columns: name, username, password, status (optional)
                 </small>
               </div>
               <button
-                className="btn btn-success w-100"
-                onClick={() => alert("File upload feature coming soon!")}
-                disabled={!selectedFile}
+                className="btn btn-outline-primary w-100 mb-2"
+                onClick={handleExportTemplate}
               >
-                <i className="bi bi-upload me-2"></i>
-                Upload File
+                <i className="bi bi-download me-2"></i>
+                Export Template
+              </button>
+              <button
+                className="btn btn-success w-100"
+                onClick={handleBulkUpload}
+                disabled={!selectedFile || loading}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-upload me-2"></i>
+                    Upload File
+                  </>
+                )}
               </button>
             </div>
           </div>
