@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type PageKey =
   | "/dashboard"
@@ -40,6 +40,16 @@ const SidebarComp: React.FC<SidebarCompProps> = ({
     setCurrentPage(key);
     router.push(key);
   };
+
+  useEffect(() => {
+    if (currentPage === "/adduser" || currentPage === "/listuser" || currentPage === "/userdetails" || currentPage === "/useredit") {
+      setUserDropdownOpen(true);
+    } else if (currentPage === "/addparticipants" || currentPage === "/listparticipants") {
+      setParticipantsDropdownOpen(true);
+    } else if (currentPage === "/addassessment" || currentPage === "/listassessment") {
+      setAssessmentDropdownOpen(true);
+    }
+  }, [currentPage]);
 
   // Fungsi logout dari code lama
   const handleLogout = () => {
