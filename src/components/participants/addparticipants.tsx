@@ -20,7 +20,8 @@ export default function AddParticipantsComp() {
   });
 
   const [judges, setJudges] = useState<Judge[]>([]); // State untuk menyimpan daftar juri
-  const [selectedJudge, setSelectedJudge] = useState<string>(""); // State untuk juri yang dipilih
+  const [selectedJudge1, setSelectedJudge1] = useState<string>(""); // State untuk juri yang dipilih
+  const [selectedJudge2, setSelectedJudge2] = useState<string>(""); // State untuk juri kedua yang dipilih
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<{ type: string; text: string } | null>(
     null
@@ -46,8 +47,10 @@ export default function AddParticipantsComp() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    if (name === "judge_id") {
-      setSelectedJudge(value);
+    if (name === "judge_id_1") {
+      setSelectedJudge1(value);
+    } else if (name === "judge_id_2") {
+      setSelectedJudge2(value);
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
@@ -69,7 +72,8 @@ export default function AddParticipantsComp() {
         "school",
         "category",
         "level",
-        "judge_id",
+        "judge_id_1",
+        "judge_id_2",
       ],
     ];
     const templateSheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -136,17 +140,30 @@ export default function AddParticipantsComp() {
               }`);
             }
 
-            // 2. Assign judge if judge_id is present
-            if (row.judge_id) {
+            // 2. Assign judges if present
+            const judgeIds = [row.judge_id_1, row.judge_id_2].filter(Boolean);
+            if (judgeIds.length > 0) {
+              // Validasi duplikat
+              if (
+                judgeIds.length === 2 &&
+                String(row.judge_id_1).trim() === String(row.judge_id_2).trim()
+              ) {
+                throw new Error(
+                  `Row ${
+                    successCount + errorCount + 1
+                  }: judge_id_1 and judge_id_2 cannot be the same.`
+                );
+              }
+
+              const assignments = judgeIds.map((judgeId) => ({
+                judge_id: judgeId,
+                team_id: participantData.id,
+                status: "pending",
+              }));
+
               const { error: assignmentError } = await supabase
                 .from("judge_assignments")
-                .insert([
-                  {
-                    judge_id: row.judge_id,
-                    team_id: participantData.id,
-                    status: "pending",
-                  },
-                ]);
+                .insert(assignments);
 
               if (assignmentError) {
                 throw new Error(`Row ${successCount + errorCount + 1}: ${
@@ -196,6 +213,11 @@ export default function AddParticipantsComp() {
       return;
     }
 
+    if (selectedJudge1 && selectedJudge1 === selectedJudge2) {
+      setMessage({ type: "danger", text: "Judge 1 and Judge 2 cannot be the same." });
+      return;
+    }
+
     setLoading(true);
 
     // 1. Insert ke tabel participants
@@ -223,17 +245,19 @@ export default function AddParticipantsComp() {
 
     const participantId = participantData.id;
 
-    // 2. Jika juri dipilih, insert ke tabel judge_assignments
-    if (selectedJudge) {
+    // Kumpulkan juri yang dipilih ke dalam array
+    const selectedJudges = [selectedJudge1, selectedJudge2].filter(Boolean);
+
+    if (selectedJudges.length > 0) {
+      const assignments = selectedJudges.map((judgeId) => ({
+        judge_id: judgeId,
+        team_id: participantId,
+        status: "pending",
+      }));
+
       const { error: assignmentError } = await supabase
         .from("judge_assignments")
-        .insert([
-          {
-            judge_id: selectedJudge,
-            team_id: participantId,
-            status: "pending", // atau status default lainnya
-          },
-        ]);
+        .insert(assignments);
 
       if (assignmentError) {
         console.error(assignmentError);
@@ -242,7 +266,7 @@ export default function AddParticipantsComp() {
           text: "Gagal menugaskan juri. Peserta telah ditambahkan.",
         });
         setLoading(false);
-        return; // Hentikan eksekusi di sini jika ada error penugasan
+        return;
       }
     }
 
@@ -258,7 +282,8 @@ export default function AddParticipantsComp() {
       category: "",
       level: "",
     });
-    setSelectedJudge("");
+    setSelectedJudge1("");
+    setSelectedJudge2("");
   };
 
   return (
@@ -363,16 +388,33 @@ export default function AddParticipantsComp() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label fw-semibold">Judge</label>
+                <label className="form-label fw-semibold">Judge 1</label>
                 <select
                   className="form-select"
-                  name="judge_id"
-                  value={selectedJudge}
+                  name="judge_id_1"
+                  value={selectedJudge1}
                   onChange={handleInputChange}
                 >
-                  <option value="">Select judge</option>
+                  <option value="">Select judge 1</option>
                   {judges.map((judge) => (
-                    <option key={judge.id} value={judge.id}>
+                    <option key={`${judge.id}-1`} value={judge.id}>
+                      {judge.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Judge 2</label>
+                <select
+                  className="form-select"
+                  name="judge_id_2"
+                  value={selectedJudge2}
+                  onChange={handleInputChange}
+                >
+                  <option value="">Select judge 2</option>
+                  {judges.map((judge) => (
+                    <option key={`${judge.id}-2`} value={judge.id}>
                       {judge.name}
                     </option>
                   ))}
