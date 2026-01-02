@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import * as XLSX from "xlsx";
 
 interface Judge {
   id: string;
@@ -20,7 +21,7 @@ export default function AddParticipantsComp() {
 
   const [judges, setJudges] = useState<Judge[]>([]); // State untuk menyimpan daftar juri
   const [selectedJudge, setSelectedJudge] = useState<string>(""); // State untuk juri yang dipilih
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<{ type: string; text: string } | null>(
     null
   );
@@ -54,10 +55,128 @@ export default function AddParticipantsComp() {
 
   // === FILE CHANGE (BULK UPLOAD) ===
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file.name);
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+  };
+
+  const handleExportTemplate = () => {
+    // 1. Buat data untuk lembar template
+    const templateData = [
+      [
+        "booth_code",
+        "country",
+        "project_title",
+        "school",
+        "category",
+        "level",
+        "judge_id",
+      ],
+    ];
+    const templateSheet = XLSX.utils.aoa_to_sheet(templateData);
+
+    // 2. Buat data untuk lembar daftar juri
+    const judgesListData = [
+      ["judge_id", "judge_name"],
+      ...judges.map((judge) => [judge.id, judge.name]),
+    ];
+    const judgesListSheet = XLSX.utils.aoa_to_sheet(judgesListData);
+
+    // 3. Buat workbook dan tambahkan lembar
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, templateSheet, "Participants Template");
+    XLSX.utils.book_append_sheet(wb, judgesListSheet, "Judges List");
+
+    // 4. Tulis file dan unduh
+    XLSX.writeFile(wb, "participant_template.xlsx");
+  };
+
+  const handleBulkUpload = async () => {
+    if (!selectedFile) {
+      setMessage({ type: "danger", text: "Please select a file to upload." });
+      return;
     }
+
+    setLoading(true);
+    setMessage(null);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of json) {
+          try {
+            // 1. Insert participant
+            const { data: participantData, error: participantError } =
+              await supabase
+                .from("participants")
+                .insert([
+                  {
+                    booth_code: row.booth_code,
+                    country: row.country,
+                    project_title: row.project_title,
+                    school: row.school,
+                    category: row.category,
+                    level: row.level,
+                  },
+                ])
+                .select("id")
+                .single();
+
+            if (participantError) {
+              throw new Error(`Row ${successCount + errorCount + 1}: ${
+                participantError.message
+              }`);
+            }
+
+            // 2. Assign judge if judge_id is present
+            if (row.judge_id) {
+              const { error: assignmentError } = await supabase
+                .from("judge_assignments")
+                .insert([
+                  {
+                    judge_id: row.judge_id,
+                    team_id: participantData.id,
+                    status: "pending",
+                  },
+                ]);
+
+              if (assignmentError) {
+                throw new Error(`Row ${successCount + errorCount + 1}: ${
+                  assignmentError.message
+                } (participant was added)`);
+              }
+            }
+            successCount++;
+          } catch (rowError) {
+            console.error(rowError);
+            errorCount++;
+          }
+        }
+
+        setMessage({
+          type: "success",
+          text: `Upload complete. ${successCount} successful, ${errorCount} failed.`,
+        });
+      } catch (error: any) {
+        setMessage({
+          type: "danger",
+          text: error.message || "An error occurred during bulk upload.",
+        });
+      } finally {
+        setLoading(false);
+        setSelectedFile(null);
+      }
+    };
+
+    reader.readAsArrayBuffer(selectedFile);
   };
 
   // === SAVE TO SUPABASE ===
@@ -302,7 +421,7 @@ export default function AddParticipantsComp() {
                 {selectedFile && (
                   <small className="text-success mt-2 d-block">
                     <i className="bi bi-check-circle me-1"></i>
-                    Selected: {selectedFile}
+                    Selected: {selectedFile.name}
                   </small>
                 )}
               </div>
@@ -315,9 +434,30 @@ export default function AddParticipantsComp() {
                 </small>
               </div>
 
-              <button className="btn btn-success w-100" disabled={!selectedFile}>
-                <i className="bi bi-upload me-2"></i>
-                Upload File
+              <button
+                className="btn btn-outline-primary w-100 mb-2"
+                onClick={handleExportTemplate}
+              >
+                <i className="bi bi-download me-2"></i>
+                Export Template
+              </button>
+
+              <button
+                className="btn btn-success w-100"
+                disabled={!selectedFile || loading}
+                onClick={handleBulkUpload}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-upload me-2"></i>
+                    Upload File
+                  </>
+                )}
               </button>
             </div>
           </div>
