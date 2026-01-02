@@ -71,8 +71,7 @@ export default function AddParticipantsComp() {
       !formData.project_title ||
       !formData.school ||
       !formData.category ||
-      !formData.level ||
-      !selectedJudge
+      !formData.level
     ) {
       setMessage({ type: "danger", text: "Semua field harus diisi!" });
       return;
@@ -105,39 +104,42 @@ export default function AddParticipantsComp() {
 
     const participantId = participantData.id;
 
-    // 2. Insert ke tabel judge_assignments
-    const { error: assignmentError } = await supabase
-      .from("judge_assignments")
-      .insert([
-        {
-          judge_id: selectedJudge,
-          team_id: participantId,
-          status: "pending", // atau status default lainnya
-        },
-      ]);
+    // 2. Jika juri dipilih, insert ke tabel judge_assignments
+    if (selectedJudge) {
+      const { error: assignmentError } = await supabase
+        .from("judge_assignments")
+        .insert([
+          {
+            judge_id: selectedJudge,
+            team_id: participantId,
+            status: "pending", // atau status default lainnya
+          },
+        ]);
+
+      if (assignmentError) {
+        console.error(assignmentError);
+        setMessage({
+          type: "danger",
+          text: "Gagal menugaskan juri. Peserta telah ditambahkan.",
+        });
+        setLoading(false);
+        return; // Hentikan eksekusi di sini jika ada error penugasan
+      }
+    }
 
     setLoading(false);
+    setMessage({ type: "success", text: "Peserta berhasil ditambahkan!" });
 
-    if (assignmentError) {
-      console.error(assignmentError);
-      setMessage({
-        type: "danger",
-        text: "Gagal menugaskan juri. Peserta telah ditambahkan.",
-      });
-    } else {
-      setMessage({ type: "success", text: "Peserta berhasil ditambahkan!" });
-
-      // Reset form
-      setFormData({
-        booth_code: "",
-        country: "",
-        project_title: "",
-        school: "",
-        category: "",
-        level: "",
-      });
-      setSelectedJudge("");
-    }
+    // Reset form
+    setFormData({
+      booth_code: "",
+      country: "",
+      project_title: "",
+      school: "",
+      category: "",
+      level: "",
+    });
+    setSelectedJudge("");
   };
 
   return (
