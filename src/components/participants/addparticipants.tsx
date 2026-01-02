@@ -1,7 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+
+interface Judge {
+  id: string;
+  name: string;
+}
 
 export default function AddParticipantsComp() {
   const [formData, setFormData] = useState({
@@ -13,14 +18,38 @@ export default function AddParticipantsComp() {
     level: "",
   });
 
+  const [judges, setJudges] = useState<Judge[]>([]); // State untuk menyimpan daftar juri
+  const [selectedJudge, setSelectedJudge] = useState<string>(""); // State untuk juri yang dipilih
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: string; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: string; text: string } | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
 
+  // === FETCH JUDGES ===
+  useEffect(() => {
+    const fetchJudges = async () => {
+      const { data, error } = await supabase.from("judges").select("id, name");
+      if (error) {
+        console.error("Error fetching judges:", error);
+      } else {
+        setJudges(data);
+      }
+    };
+
+    fetchJudges();
+  }, []);
+
   // === HANDLE INPUT ===
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === "judge_id") {
+      setSelectedJudge(value);
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   // === FILE CHANGE (BULK UPLOAD) ===
@@ -42,7 +71,8 @@ export default function AddParticipantsComp() {
       !formData.project_title ||
       !formData.school ||
       !formData.category ||
-      !formData.level
+      !formData.level ||
+      !selectedJudge
     ) {
       setMessage({ type: "danger", text: "Semua field harus diisi!" });
       return;
@@ -50,22 +80,50 @@ export default function AddParticipantsComp() {
 
     setLoading(true);
 
-    const { error } = await supabase.from("participants").insert([
-      {
-        booth_code: formData.booth_code,
-        country: formData.country,
-        project_title: formData.project_title,
-        school: formData.school,
-        category: formData.category,
-        level: formData.level,
-      },
-    ]);
+    // 1. Insert ke tabel participants
+    const { data: participantData, error: participantError } = await supabase
+      .from("participants")
+      .insert([
+        {
+          booth_code: formData.booth_code,
+          country: formData.country,
+          project_title: formData.project_title,
+          school: formData.school,
+          category: formData.category,
+          level: formData.level,
+        },
+      ])
+      .select("id")
+      .single();
+
+    if (participantError) {
+      console.error(participantError);
+      setMessage({ type: "danger", text: "Gagal menambahkan peserta." });
+      setLoading(false);
+      return;
+    }
+
+    const participantId = participantData.id;
+
+    // 2. Insert ke tabel judge_assignments
+    const { error: assignmentError } = await supabase
+      .from("judge_assignments")
+      .insert([
+        {
+          judge_id: selectedJudge,
+          team_id: participantId,
+          status: "pending", // atau status default lainnya
+        },
+      ]);
 
     setLoading(false);
 
-    if (error) {
-      console.error(error);
-      setMessage({ type: "danger", text: "Gagal menambahkan peserta." });
+    if (assignmentError) {
+      console.error(assignmentError);
+      setMessage({
+        type: "danger",
+        text: "Gagal menugaskan juri. Peserta telah ditambahkan.",
+      });
     } else {
       setMessage({ type: "success", text: "Peserta berhasil ditambahkan!" });
 
@@ -78,6 +136,7 @@ export default function AddParticipantsComp() {
         category: "",
         level: "",
       });
+      setSelectedJudge("");
     }
   };
 
@@ -179,6 +238,23 @@ export default function AddParticipantsComp() {
                   <option>Sekolah Menengah Pertama</option>
                   <option>Sekolah Menengah Atas</option>
                   <option>Universitas</option>
+                </select>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Judge</label>
+                <select
+                  className="form-select"
+                  name="judge_id"
+                  value={selectedJudge}
+                  onChange={handleInputChange}
+                >
+                  <option value="">Select judge</option>
+                  {judges.map((judge) => (
+                    <option key={judge.id} value={judge.id}>
+                      {judge.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
