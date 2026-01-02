@@ -213,7 +213,7 @@ const SidebarComp: React.FC<SidebarCompProps> = ({
         <li className="nav-item">
           <a
             className={`nav-link text-white ${
-              currentPage === "/result" ? "active bg-primary" : ""
+              currentPage === "/assignjudges" ? "active bg-primary" : ""
             }`}
             style={{ cursor: "pointer", padding: "10px 20px" }}
             onClick={() => handleNavigation("/assignjudges")}
